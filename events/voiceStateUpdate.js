@@ -112,7 +112,7 @@ export default {
 
             // create the memberId and date folder if it doesn't exist...
             if (!fs.existsSync(userAudioDir)) {
-              fs.mkdirSync(userAudioDir);
+              fs.mkdirSync(userAudioDir, { recursive: true });
             }
 
             // iterate through the existing audio files to determine the max number...
