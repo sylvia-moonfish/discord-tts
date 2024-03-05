@@ -92,7 +92,7 @@ export default {
         });
 
         const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
+        const __dirname = path.dirname(path.join(__filename, ".."));
 
         // iterate through all signed up members in the voice channel...
         targetChannel.channel.signedUpMembers.each((member) => {
@@ -125,6 +125,8 @@ export default {
               }
             }
 
+            const audioFilePath = path.join(userAudioDir, maxNum.toString());
+
             // subscribe to the target user's audio stream,
             // then pipe the opus stream through opus decoder,
             // then write it to the file stream.
@@ -137,9 +139,11 @@ export default {
                   rate: 48000,
                 })
               )
-              .pipe(
-                fs.createWriteStream(path.join(userAudioDir, maxNum.toString()))
-              );
+              .pipe(fs.createWriteStream(audioFilePath));
+
+            console.log(
+              `Audio receiver pipe established! userId: ${member.id}, path: ${audioFilePath}`
+            );
 
             // ffmpeg -f s16le -ar 48k -ac 2 -i out.pcm out.mp3
           }
