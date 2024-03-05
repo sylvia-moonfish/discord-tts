@@ -137,7 +137,9 @@ export default {
                   rate: 48000,
                 })
               )
-              .pipe(fs.createWriteStream(path.join(userAudioDir, maxNum)));
+              .pipe(
+                fs.createWriteStream(path.join(userAudioDir, maxNum.toString()))
+              );
 
             // ffmpeg -f s16le -ar 48k -ac 2 -i out.pcm out.mp3
           }
