@@ -16,41 +16,51 @@ export default {
     // escape to break infinite looping.
     if (oldState.id === process.env.CLIENT_ID) return;
 
-    // find voice channels with active members.
+    // prepare lowdb.
+    const db = await JSONFilePreset(".db.json", { users: [] });
+    await db.read();
+
+    // find voice channels with signed up members.
     const guild = oldState.guild;
     const channels = await guild.channels.fetch();
-    const activeChannels = channels
-      .filter((channel) => channel.type === ChannelType.GuildVoice)
-      .filter((channel) => channel.members.size > 0);
+    const voiceChannels = channels.filter(
+      (channel) => channel.type === ChannelType.GuildVoice
+    );
+    voiceChannels.forEach((voiceChannel) => {
+      voiceChannel.signedUpMembers = voiceChannel.members.filter(
+        (member) => !!db.data.users.find((user) => user.id === member.id)
+      );
+    });
+    const signedUpChannels = voiceChannels.filter(
+      (channel) => channel.signedUpMembers.size > 0
+    );
 
     // check if bot has already established voice connection.
     const connection = getVoiceConnection(guild.id);
 
-    // if connection exists and there's no active channel, disconnect.
-    if (connection && activeChannels.size === 0) {
+    // if connection exists and there's no channel with signed up members, disconnect.
+    if (connection && signedUpChannels.size <= 0) {
       connection.destroy();
     } else {
-      // prepare lowdb.
-      const db = await JSONFilePreset(".db.json", { users: [] });
-      await db.read();
-
       const targetUser = db.data.users.find((user) => user.target);
-      const targetChannel = { id: -1, size: -1 };
+      const targetChannel = { id: -1, size: -1, channel: undefined };
 
       if (targetUser) {
-        // if a user is marked as targeted,
+        // if a user is marked as targeted in db,
         // find the channel where that user is connected to.
-        const _channel = activeChannels.filter(
+        const _channel = signedUpChannels.filter(
           (channel) =>
-            channel.members.filter((member) => member.id === targetUser.id)
-              .size > 0
+            channel.signedUpMembers.filter(
+              (member) => member.id === targetUser.id
+            ).size > 0
         );
 
         // if target user is found,
         // mark that channel as the target so that bot can connect to it.
         if (_channel.size > 0) {
           targetChannel.id = _channel.at(0).id;
-          targetChannel.size = _channel.at(0).members.size;
+          targetChannel.size = _channel.at(0).signedUpMembers.size;
+          targetChannel.channel = _channel.at(0);
         }
       }
 
@@ -60,16 +70,13 @@ export default {
       if (targetChannel.size === -1) {
         // iterate through all voice channels and count the
         // number of signed up users.
-        activeChannels.each((channel) => {
-          if (
-            channel.members.filter(
-              (member) => !!db.data.users.find((user) => user.id === member.id)
-            ).size > targetChannel.size
-          ) {
+        signedUpChannels.each((channel) => {
+          if (channel.signedUpMembers.size > targetChannel.size) {
             // set the channel with the most number of signed up users
             // as the target channel.
             targetChannel.id = channel.id;
-            targetChannel.size = channel.members.size;
+            targetChannel.size = channel.signedUpMembers.size;
+            targetChannel.channel = channel;
           }
         });
       }
@@ -84,29 +91,19 @@ export default {
           selfDeaf: false,
         });
 
-        // find the target channel info from the list of channels.
-        const joinedChannel = activeChannels.find(
-          (channel) => channel.id === targetChannel.id
-        );
-
-        // find the member information of the target channel.
-        const joinedMembers = joinedChannel.members.filter(
-          (member) => !!db.data.users.find((user) => user.id === member.id)
-        );
-
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = path.dirname(__filename);
 
         // iterate through all signed up members in the voice channel...
-        joinedMembers.each((joinedMember) => {
+        targetChannel.channel.signedUpMembers.each((member) => {
           // check if a subscription has been made already.
-          if (!connection.receiver.subscriptions.has(joinedMember.id)) {
+          if (!connection.receiver.subscriptions.has(member.id)) {
             // file path would be ~/audio/{memberId}/{date}/{number}
             const isoDate = new Date().toISOString();
             const userAudioDir = path.join(
               __dirname,
               "audio",
-              joinedMember.id,
+              member.id,
               isoDate.substring(0, isoDate.indexOf("T"))
             );
 
@@ -132,7 +129,7 @@ export default {
             // then pipe the opus stream through opus decoder,
             // then write it to the file stream.
             connection.receiver
-              .subscribe(joinedMember.id)
+              .subscribe(member.id)
               .pipe(
                 new prism.opus.Decoder({
                   frameSize: 960,
