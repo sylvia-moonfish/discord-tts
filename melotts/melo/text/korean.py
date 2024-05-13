@@ -17,6 +17,7 @@ def normalize(text):
     text = text.strip()
     text = re.sub("[⺀-⺙⺛-⻳⼀-⿕々〇〡-〩〸-〺〻㐀-䶵一-鿃豈-鶴侮-頻並-龎]", "", text)
     text = normalize_with_dictionary(text, etc_dictionary)
+    text = normalize_with_dictionary(text, english_dictionary)
     text = normalize_english(text)
     text = text.lower()
     return text
